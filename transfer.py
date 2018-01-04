@@ -78,7 +78,8 @@ class transfer(object):
         elif self.dataset == 'middle_white':
             self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/middle_white/NG_train_128')
         elif self.dataset == 'flower_chip':
-            self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/flower_chip')
+            # because flower_chip flaw is polycrystaline, so OK samples are different than other monocrystaline
+            self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/flower_chip/OK_train', '../generative_models/pytorch/data/flower_chip/NG/train')
         elif self.dataset == 'gas_leak_dirt':
             self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/gas_leak_dirt/train')
         elif self.dataset == 'intra_chip_diff':
@@ -186,6 +187,8 @@ class transfer(object):
         self.network.eval()
         if self.dataset == 'middle_white':
             self.test_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/middle_white/NG_test_128')
+        elif self.dataset == 'flower_chip':
+            self.test_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/flower_chip/OK/test', '../generative_models/pytorch/data/flower_chip/NG/test')
         elif self.dataset == 'gas_leak_dirt':
             self.test_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/gas_leak_dirt/test')
         corrects = 0
