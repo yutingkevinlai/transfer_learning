@@ -1,4 +1,5 @@
 from __future__ import division
+from utils import bcolors
 import os, utils, utilsLoadData, time, pickle, cv2
 import torch
 import numpy as np
@@ -73,13 +74,23 @@ class transfer(object):
         utils.print_network(self.network)
         print("------------------------------------------")
 
+    def train(self):
+        self.early_stop = False
+        self.train_hist = {}
+        self.train_hist['train_loss'] = []
+        self.train_hist['train_accuracy'] = []
+        self.train_hist['per_epoch_time'] = []
+        self.train_hist['total_time'] = []
+        self.record_file = os.path.join(self.result_dir,"records_"+str(self.img_size)+".txt")
+
+        # read data for training stage
         if self.dataset == 'wood_old':
             self.train_data_loader = utilsLoadData.load_wood_old(data_dir='../generative_models/pytorch/data/wood_old', batch_size=self.batch_size, img_size=self.img_size)
         elif self.dataset == 'middle_white':
             self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/middle_white/NG_train_128')
         elif self.dataset == 'flower_chip':
             # because flower_chip flaw is polycrystaline, so OK samples are different than other monocrystaline
-            self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/flower_chip/OK_train', '../generative_models/pytorch/data/flower_chip/NG/train')
+            self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/flower_chip/OK/train', '../generative_models/pytorch/data/flower_chip/NG/train')
         elif self.dataset == 'gas_leak_dirt':
             self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/gas_leak_dirt/train')
         elif self.dataset == 'intra_chip_diff':
@@ -87,24 +98,18 @@ class transfer(object):
         else:
             raise Exception("[!] No dataset named %s" %self.dataset)
 
-    def train(self):
-        self.train_hist = {}
-        self.train_hist['train_loss'] = []
-        self.train_hist['train_accuracy'] = []
-        self.train_hist['test_accuracy'] = []
-        self.train_hist['per_epoch_time'] = []
-        self.train_hist['total_time'] = []
-        self.record_file = os.path.join(self.result_dir,"records_"+str(self.img_size)+".txt")
-
+        # start training
         self.network.train()
         print("Training start! with %d data" %self.train_data_loader.dataset.__len__())
+        with open(self.record_file, 'w') as f:
+            f.write("learning rate: %f\n" %self.lr)
         start_time = time.time()
         for epoch in range(self.epoch):
             # initialize some variables to calculate confusion matrix
             neg = torch.zeros(self.batch_size, 1).type(torch.LongTensor).cuda()
             pos = torch.ones(self.batch_size, 1).type(torch.LongTensor).cuda()
             corrects = 0
-            true_positive, false_negative, false_positive, true_negative = 0, 0, 0, 0
+            self.train_tp, self.train_fn, self.train_fp, self.train_tn = 0, 0, 0, 0
             utils.lr_decay(self.optimizer, self.lr, (epoch+1))
 
             # start epoch
@@ -129,34 +134,42 @@ class transfer(object):
 
                 # statistics
                 corrects += torch.sum(preds == gts)
-                true_positive += torch.sum(torch.gt((preds==neg),(gts==pos)))
-                false_positive += torch.sum(torch.gt(preds,gts))
-                true_negative += torch.sum(torch.lt((preds==neg),(gts==pos)))
-                false_negative += torch.sum(torch.lt(preds,gts))
+                self.train_tp += torch.sum(torch.gt((preds==neg),(gts==pos)))
+                self.train_fn += torch.sum(torch.gt(preds,gts))
+                self.train_tn += torch.sum(torch.lt((preds==neg),(gts==pos)))
+                self.train_fp += torch.sum(torch.lt(preds,gts))
 
                 if ((iter+1)%100 == 0):
                     print("Epoch: [%2d] [%4d/%4d] train loss: %.8f" %((epoch + 1), (iter + 1), self.train_data_loader.dataset.__len__()//self.batch_size, loss.data[0]))
 
-            train_accuracy = corrects / self.train_data_loader.dataset.__len__()
+            self.train_accuracy = corrects / self.train_data_loader.dataset.__len__()
             self.train_hist['train_loss'].append(loss.data[0])
-            self.train_hist['train_accuracy'].append(train_accuracy)
-            print("train accuracy: %.4f" %(train_accuracy))
-            print("----------------------------------")
+            self.train_hist['train_accuracy'].append(self.train_accuracy)
+            print("train accuracy: %.4f" %(self.train_accuracy))
+            print("--------------------------------------")
             print("|          |  positive  |  negative  |")
-            print("| positive |   %7d  |   %7d  |" %(true_positive, false_negative))
-            print("| negative |   %7d  |   %7d  |" %(false_positive, true_negative))
-            print("-----------------------------------")
+            print("| positive |   %7d  |   %7d  |" %(self.train_tp, self.train_fp))
+            print("| negative |   %7d  |   %7d  |" %(self.train_fn, self.train_tn))
+            print("--------------------------------------")
             with open(self.record_file, 'a') as f:
                 f.write("Epoch: %d\n" %(epoch+1))
-                f.write("Training Accuracy: %.4f\n" %(train_accuracy))
+                f.write("Training Accuracy: %.4f\n" %(self.train_accuracy))
                 f.write("--------------------------------------\n")
                 f.write("|          |  positive  |  negative  |\n")
-                f.write("| positive |   %7d  |   %7d  |\n" %(true_positive, false_negative))
-                f.write("| negative |   %7d  |   %7d  |\n" %(false_positive, true_negative))
+                f.write("| positive |   %7d  |   %7d  |\n" %(self.train_tp, self.train_fp))
+                f.write("| negative |   %7d  |   %7d  |\n" %(self.train_fn, self.train_tn))
                 f.write("--------------------------------------\n")
 
             # compute testing accuracy and print testing information
-            test_accuracy = self.predict_test()
+            self.predict_test()
+
+            with open(self.record_file, 'a') as f:
+                f.write("Testing Accuracy: %.4f\n" %(self.test_accuracy))
+                f.write("--------------------------------------\n")
+                f.write("|          |  positive  |  negative  |\n")
+                f.write("| positive |   %7d  |   %7d  |\n" %(self.test_tp, self.test_fp))
+                f.write("| negative |   %7d  |   %7d  |\n" %(self.test_fn, self.test_tn))
+                f.write("--------------------------------------\n")
 
             self.train_hist['per_epoch_time'].append(time.time()-epoch_start_time)
             # early stopping
@@ -192,7 +205,7 @@ class transfer(object):
         elif self.dataset == 'gas_leak_dirt':
             self.test_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/gas_leak_dirt/test')
         corrects = 0
-        true_positive, true_negative, false_positive, false_negative = 0, 0, 0, 0
+        self.test_tp, self.test_tn, self.test_fp, self.test_fn = 0, 0, 0, 0
         neg = torch.zeros(self.batch_size, 1).type(torch.LongTensor).cuda()
         pos = torch.ones(self.batch_size, 1).type(torch.LongTensor).cuda()
         for iter, (x_, y_) in enumerate(self.test_data_loader):
@@ -208,32 +221,22 @@ class transfer(object):
 
             # statistics
             corrects += torch.sum(preds == gts)
-            true_positive += torch.sum(torch.gt((preds==neg),(gts==pos)))
-            false_positive += torch.sum(torch.gt(preds,gts))
-            true_negative += torch.sum(torch.lt((preds==neg),(gts==pos)))
-            false_negative += torch.sum(torch.lt(preds,gts))
+            self.test_tp += torch.sum(torch.gt((preds==neg),(gts==pos)))
+            self.test_fn += torch.sum(torch.gt(preds,gts))
+            self.test_tn += torch.sum(torch.lt((preds==neg),(gts==pos)))
+            self.test_fp += torch.sum(torch.lt(preds,gts))
 
-        test_accuracy = corrects / self.test_data_loader.dataset.__len__()
-        self.train_hist['test_accuracy'].append(test_accuracy)
+        self.test_accuracy = corrects / self.test_data_loader.dataset.__len__()
 
-        print("test accuracy: %.4f" %(test_accuracy))
-        print("----------------------------------")
+        print("test accuracy: %.4f" %(self.test_accuracy))
+        print("--------------------------------------")
         print("|          |  positive  |  negative  |")
-        print("| positive |   %7d  |   %7d  |" %(true_positive, false_negative))
-        print("| negative |   %7d  |   %7d  |" %(false_positive, true_negative))
-        print("-----------------------------------")
+        print("| positive |   %7d  |   %7d  |" %(self.test_tp, self.test_fp))
+        print("| negative |   %7d  |   %7d  |" %(self.test_fn, self.test_tn))
+        print("--------------------------------------")
+        print("\n"+bcolors.OKGREEN+bcolors.BOLD+"False Positive Rate: %.8f" %(self.test_fp/(self.test_fp+self.test_tn))+"\n"+bcolors.ENDC)
 
-        with open(self.record_file, 'a') as f:
-            f.write("Testing Accuracy: %.4f\n" %(test_accuracy))
-            f.write("--------------------------------------\n")
-            f.write("|          |  positive  |  negative  |\n")
-            f.write("| positive |   %7d  |   %7d  |\n" %(true_positive, false_negative))
-            f.write("| negative |   %7d  |   %7d  |\n" %(false_positive, true_negative))
-            f.write("--------------------------------------\n")
-
-        return test_accuracy
-
-    def predict(self):
+    def predict_gen(self):
         # Make prediction on generated data
         self.load()
 

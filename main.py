@@ -49,8 +49,11 @@ def main():
         tr.train()
         print("[*] Training finished!")
     else:
+        print("[*] Start predicting...")
         # predict the generated data
-        tr.predict()
+        tr.load()
+        tr.predict_test()
+        #tr.predict_gen()
         print("[*] Prediction finished")
 
 if __name__ == '__main__':
