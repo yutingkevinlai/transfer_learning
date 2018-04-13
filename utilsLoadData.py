@@ -1,4 +1,4 @@
-import glob, os, csv
+import glob, os, csv, cv2
 import torch.nn as nn
 import numpy as np
 import scipy, scipy.misc
@@ -123,18 +123,24 @@ class dataFolderAll(Dataset):
         self.subfolders = list(map(lambda x: os.path.join(self.data_dir,x), os.listdir(self.data_dir)))
         print(self.subfolders)
         self.image_paths = []
-        
+        self.labels = []
         for i in range(len(self.subfolders)):
             imgs = list(map(lambda x: os.path.join(self.subfolders[i],x), os.listdir(self.subfolders[i])))
-            #print(imgs)
-            self.image_paths.append(imgs)
-            
+            for j in range(len(imgs)):
+                self.image_paths.append(imgs[j])
+                self.labels.append(i)
+        print(len(self.image_paths))
+        print(len(self.labels))
         self.transform = transform
         self.convert = convert
 
     def __getitem__(self, index):
-        image_path = self.image_paths[index]
-    
+        
+        image = cv2.imread(self.image_paths[index])
+        if self.transform is not None:
+            image = self.transform(image)
+        return image, self.label[index]
+        
     def __len__(self):
         return len(self.image_paths)
        
