@@ -4,19 +4,20 @@ from transfer import transfer
 def parse_args():
     desc = "Transfer Learning"
     parser = argparse.ArgumentParser(description=desc)
-    parser.add_argument('--epoch', type=int, default=25,
+    parser.add_argument('-e','--epoch', type=int, default=25,
                         help='Iteration of the whole dataset')
-    parser.add_argument('--img_size', type=int, default=128,
+    parser.add_argument('-sz','--img_size', type=int, default=128,
                         help='The size of image')
-    parser.add_argument('--lr', type=float, default=0.01)
-    parser.add_argument('--batch_size', type=int, default=64,
+    parser.add_argument('-lr', type=float, default=0.01)
+    parser.add_argument('-b','--batch_size', type=int, default=64,
                         help='The size of batch')
-    parser.add_argument('--result_folder', type=str, default='results',
+    parser.add_argument('-r','--result_folder', type=str, default='results',
                         help='Folder name to save results')
-    parser.add_argument('--dataset', type=str, default='wood_old',
+    parser.add_argument('-d','--dataset', type=str, default='wood',
                         help='Dataset name')
-    parser.add_argument('--predict', type=bool, default=False,
+    parser.add_argument('-p','--predict', type=bool, default=False,
                         help='Predict?')
+    parser.add_argument('--decay', type=int, default=0)
     return check_args(parser.parse_args())
 
 def check_args(args):

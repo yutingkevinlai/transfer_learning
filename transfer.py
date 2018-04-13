@@ -17,11 +17,11 @@ class vgg19(nn.Module):
         self.input_height = img_size
         self.input_width = img_size
         self.input_dim = 3
-        if dataset == 'wood_old':
+        if dataset == 'wood':
             self.output_dim = 5
         elif dataset == 'middle_white':
             self.output_dim = 2
-        elif dataset == 'solar_ok_ori_128':
+        elif dataset == 'solar':
             self.output_dim = 2
         elif dataset == 'flower_chip':
             self.output_dim = 2
@@ -60,6 +60,7 @@ class transfer(object):
         self.lr = args.lr
         self.batch_size = args.batch_size
         self.epoch = args.epoch
+        self.decay = args.decay
         self.result_dir = os.path.join(args.result_folder, args.dataset)
         if not os.path.exists(self.result_dir):
             os.makedirs(self.result_dir)
@@ -84,23 +85,26 @@ class transfer(object):
         self.record_file = os.path.join(self.result_dir,"records_"+str(self.img_size)+".txt")
 
         # read data for training stage
-        if self.dataset == 'wood_old':
-            self.train_data_loader = utilsLoadData.load_wood_old(data_dir='../generative_models/pytorch/data/wood_old', batch_size=self.batch_size, img_size=self.img_size)
+        if self.dataset == 'wood':
+            self.train_data_loader = utilsLoadData.load_all(
+                data_dir='../data/wood', 
+                batch_size=self.batch_size, 
+                img_size=self.img_size)
         elif self.dataset == 'middle_white':
-            self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/middle_white/NG_train_128')
+            self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../data/middle_white/OK_train_128', '../data/middle_white/NG_train_128')
         elif self.dataset == 'flower_chip':
             # because flower_chip flaw is polycrystaline, so OK samples are different than other monocrystaline
             self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/flower_chip/OK/train', '../generative_models/pytorch/data/flower_chip/NG/train')
         elif self.dataset == 'gas_leak_dirt':
-            self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/gas_leak_dirt/train')
+            self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_128', '../generative_models/pytorch/data/gas_leak_dirt/train')
         elif self.dataset == 'intra_chip_diff':
-            self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/intra_chip_diff')
+            self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_128', '../generative_models/pytorch/data/intra_chip_diff')
         else:
             raise Exception("[!] No dataset named %s" %self.dataset)
 
         # start training
         self.network.train()
-        print("Training start! with %d data" %self.train_data_loader.dataset.__len__())
+        print(bcolors.OKBLUE+"Training start! total: %d data" %self.train_data_loader.dataset.__len__()+bcolors.ENDC)
         with open(self.record_file, 'w') as f:
             f.write("learning rate: %f\n" %self.lr)
         start_time = time.time()
@@ -110,7 +114,7 @@ class transfer(object):
             pos = torch.ones(self.batch_size, 1).type(torch.LongTensor).cuda()
             corrects = 0
             self.train_tp, self.train_fn, self.train_fp, self.train_tn = 0, 0, 0, 0
-            utils.lr_decay(self.optimizer, self.lr, (epoch+1))
+            utils.lr_decay(self.optimizer, (epoch+1), self.decay, mode='lambda')
 
             # start epoch
             epoch_start_time = time.time()
@@ -145,12 +149,12 @@ class transfer(object):
             self.train_accuracy = corrects / self.train_data_loader.dataset.__len__()
             self.train_hist['train_loss'].append(loss.data[0])
             self.train_hist['train_accuracy'].append(self.train_accuracy)
-            print("train accuracy: %.4f" %(self.train_accuracy))
+            print(bcolors.OKGREEN+bcolors.BOLD+"train accuracy: %.4f" %(self.train_accuracy))
             print("--------------------------------------")
             print("|          |  positive  |  negative  |")
             print("| positive |   %7d  |   %7d  |" %(self.train_tp, self.train_fp))
             print("| negative |   %7d  |   %7d  |" %(self.train_fn, self.train_tn))
-            print("--------------------------------------")
+            print("--------------------------------------"+bcolors.ENDC)
             with open(self.record_file, 'a') as f:
                 f.write("Epoch: %d\n" %(epoch+1))
                 f.write("Training Accuracy: %.4f\n" %(self.train_accuracy))
@@ -173,7 +177,7 @@ class transfer(object):
 
             self.train_hist['per_epoch_time'].append(time.time()-epoch_start_time)
             # early stopping
-            if (train_accuracy>0.996) and (test_accuracy>0.996):
+            if (self.train_accuracy>0.996) and (self.test_accuracy>0.996):
                 self.save()
                 self.early_stop = True
                 print("[!] Early stopping!")
@@ -199,11 +203,11 @@ class transfer(object):
     def predict_test(self):
         self.network.eval()
         if self.dataset == 'middle_white':
-            self.test_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/middle_white/NG_test_128')
+            self.test_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data//middle_white/OK_train_128', '../generative_models/pytorch/data/middle_white/NG_test_128')
         elif self.dataset == 'flower_chip':
             self.test_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/flower_chip/OK/test', '../generative_models/pytorch/data/flower_chip/NG/test')
         elif self.dataset == 'gas_leak_dirt':
-            self.test_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_ok_ori_128', '../generative_models/pytorch/data/gas_leak_dirt/test')
+            self.test_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../generative_models/pytorch/data/solar_128', '../generative_models/pytorch/data/gas_leak_dirt/test')
         corrects = 0
         self.test_tp, self.test_tn, self.test_fp, self.test_fn = 0, 0, 0, 0
         neg = torch.zeros(self.batch_size, 1).type(torch.LongTensor).cuda()
@@ -228,20 +232,22 @@ class transfer(object):
 
         self.test_accuracy = corrects / self.test_data_loader.dataset.__len__()
 
-        print("test accuracy: %.4f" %(self.test_accuracy))
+        print(bcolors.OKGREEN+bcolors.BOLD+"\ntest accuracy: %.4f" %(self.test_accuracy))
         print("--------------------------------------")
         print("|          |  positive  |  negative  |")
         print("| positive |   %7d  |   %7d  |" %(self.test_tp, self.test_fp))
         print("| negative |   %7d  |   %7d  |" %(self.test_fn, self.test_tn))
-        print("--------------------------------------")
-        print("\n"+bcolors.OKGREEN+bcolors.BOLD+"False Positive Rate: %.8f" %(self.test_fp/(self.test_fp+self.test_tn))+"\n"+bcolors.ENDC)
+        print("--------------------------------------"+bcolors.ENDC)
+
+        print("\n"+bcolors.OKGREEN+bcolors.BOLD+"Precision: %.8f" %(self.test_tp/(self.test_tp+self.test_fp)))
+        print(bcolors.OKGREEN+bcolors.BOLD+"False Positive Rate: %.8f" %(self.test_fp/(self.test_fp+self.test_tn))+"\n"+bcolors.ENDC)
 
     def predict_gen(self):
         # Make prediction on generated data
         self.load()
 
         self.network.eval()
-        self.predict_data_loader = utilsLoadData.load_one(self.batch_size, self.img_size, data_dir='../generative_models/pytorch/0101_DAGAN/solar_ok_ori_128/DAGAN/generated')
+        self.predict_data_loader = utilsLoadData.load_one(self.batch_size, self.img_size, data_dir='../generative_models/pytorch/0101_DAGAN/solar_128/DAGAN/generated')
         corrects = 0
         for iter, (x_, y_) in enumerate(self.predict_data_loader):
             x_, y_ = Variable(x_.cuda()), Variable(y_.type(torch.FloatTensor).cuda())

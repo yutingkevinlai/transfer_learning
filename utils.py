@@ -132,10 +132,17 @@ def initialize_weights(net):
             m.weight.data.normal_(0, 0.02)
             m.bias.data.zero_()
 
-def lr_decay(optimizer, base_lr, epoch):
-    lr = base_lr * (0.1 ** (epoch // 1))
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+def lr_decay(optimizer, epoch, decay_iter, mode=''):
+    if mode == 'lambda':
+        factor = 1.0 - max(0,epoch-decay_iter) / 100
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = param_group['lr'] * factor
+            print(param_group['lr'])
+
+    else:
+        lr = base_lr * (0.2 ** (epoch // decay_iter))
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
 
 class bcolors:
     HEADER = '\033[95m'
