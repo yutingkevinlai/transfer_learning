@@ -57,30 +57,6 @@ def load_mnist(dataset):
     return X, y_vec
 
 '''custom dataset compatible with rebuilt DataLoader'''
-def load_celebA(data_dir, batch_size, img_size=64):
-    transform = transforms.Compose([transforms.CenterCrop(160), transforms.Scale(32), transforms.ToTensor()])
-    dataset = celeba_folder(data_dir, transform)
-    data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
-
-    return data_loader
-
-class celeba_folder(Dataset):
-    '''celebA dataset'''
-    def __init__(self, data_dir, transform=None):
-        self.image_paths = list(map(lambda x: os.path.join(data_dir, x), os.listdir(data_dir)))
-        self.transform = transform
-
-    def __getitem__(self, index):
-        image_path = self.image_paths[index]
-        image = Image.open(image_path).convert('RGB')
-        label = np.zeros((10), dtype=np.float)
-        if self.transform is not None:
-            image = self.transform(image)
-        return image, label
-
-    def __len__(self):
-        return len(self.image_paths)    
-
 def load(data_dir, batch_size, img_size=64, convert='RGB'):
     ''' load data in general'''
     transform = transforms.Compose([transforms.Scale(img_size), transforms.ToTensor()]) # do not need to normalize
@@ -110,7 +86,7 @@ class dataFolder(Dataset):
         '''return the total number of image files'''
         return len(self.image_paths)
 
-def load_all(data_dir, batch_size, img_size=64, convert='L'):
+def load_all(data_dir, batch_size, img_size=64, convert='RGB'):
     transform = transforms.Compose([transforms.Scale(img_size), transforms.ToTensor()])
     dataset = dataFolderAll(data_dir, transform, convert)
     data_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
@@ -118,7 +94,7 @@ def load_all(data_dir, batch_size, img_size=64, convert='L'):
     return data_loader
     
 class dataFolderAll(Dataset):
-    def __init__(self, data_dir, transform=None, convert='L'):
+    def __init__(self, data_dir, transform=None, convert='RGB'):
         self.data_dir = data_dir
         self.subfolders = list(map(lambda x: os.path.join(self.data_dir,x), os.listdir(self.data_dir)))
         print(self.subfolders)
@@ -126,20 +102,22 @@ class dataFolderAll(Dataset):
         self.labels = []
         for i in range(len(self.subfolders)):
             imgs = list(map(lambda x: os.path.join(self.subfolders[i],x), os.listdir(self.subfolders[i])))
+            label = np.zeros(len(self.subfolders))
+            print(label)
             for j in range(len(imgs)):
                 self.image_paths.append(imgs[j])
-                self.labels.append(i)
+                label[i] = 1
+                self.labels.append(label)
         print(len(self.image_paths))
         print(len(self.labels))
         self.transform = transform
         self.convert = convert
 
     def __getitem__(self, index):
-        
-        image = cv2.imread(self.image_paths[index])
+        image = Image.open(self.image_paths[index]).convert(self.convert)
         if self.transform is not None:
             image = self.transform(image)
-        return image, self.label[index]
+        return image, self.labels[index]
         
     def __len__(self):
         return len(self.image_paths)

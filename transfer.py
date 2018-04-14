@@ -12,7 +12,7 @@ from torchvision import datasets, transforms, models
 from PIL import Image
 
 class vgg19(nn.Module):
-    def __init__(self, dataset='wood_old', img_size=128):
+    def __init__(self, dataset='wood', img_size=128):
         super(vgg19, self).__init__()
         self.input_height = img_size
         self.input_width = img_size
@@ -165,25 +165,27 @@ class transfer(object):
                 f.write("--------------------------------------\n")
 
             # compute testing accuracy and print testing information
-            self.predict_test()
+            if not self.dataset == 'wood':
+                self.predict_test()
 
-            with open(self.record_file, 'a') as f:
-                f.write("Testing Accuracy: %.4f\n" %(self.test_accuracy))
-                f.write("--------------------------------------\n")
-                f.write("|          |  positive  |  negative  |\n")
-                f.write("| positive |   %7d  |   %7d  |\n" %(self.test_tp, self.test_fp))
-                f.write("| negative |   %7d  |   %7d  |\n" %(self.test_fn, self.test_tn))
-                f.write("--------------------------------------\n")
+                with open(self.record_file, 'a') as f:
+                    f.write("Testing Accuracy: %.4f\n" %(self.test_accuracy))
+                    f.write("--------------------------------------\n")
+                    f.write("|          |  positive  |  negative  |\n")
+                    f.write("| positive |   %7d  |   %7d  |\n" %(self.test_tp, self.test_fp))
+                    f.write("| negative |   %7d  |   %7d  |\n" %(self.test_fn, self.test_tn))
+                    f.write("--------------------------------------\n")
 
             self.train_hist['per_epoch_time'].append(time.time()-epoch_start_time)
             # early stopping
-            if (self.train_accuracy>0.996) and (self.test_accuracy>0.996):
-                self.save()
-                self.early_stop = True
-                print("[!] Early stopping!")
-                with open(self.record_file, 'a') as f:
-                    f.write("[!] Early stopping")
-                break
+            if not self.dataset == 'wood':
+                if (self.train_accuracy>0.996) and (self.test_accuracy>0.996):
+                    self.save()
+                    self.early_stop = True
+                    print("[!] Early stopping!")
+                    with open(self.record_file, 'a') as f:
+                        f.write("[!] Early stopping")
+                    break
             
         self.train_hist['total_time'].append(time.time()-start_time)
         print("Avg one epoch time: %.2f, total %d epochs time: %.2f" %(np.mean(self.train_hist['per_epoch_time']), self.epoch, self.train_hist['total_time'][0]))
