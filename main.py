@@ -17,6 +17,8 @@ def parse_args():
                         help='Dataset name')
     parser.add_argument('-p','--predict', type=bool, default=False,
                         help='Predict?')
+    parser.add_argument('-n','--network', type=str, help='Which network?', required=True)
+    parser.add_argument('--date', type=str, help='Date', required=True)
     parser.add_argument('--decay', type=int, default=0)
     return check_args(parser.parse_args())
 

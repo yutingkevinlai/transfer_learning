@@ -11,6 +11,53 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms, models
 from PIL import Image
 
+class lenet(nn.Module):
+    def __init__(self, dataset='wood', img_size=128):
+        super(lenet, self).__init__()
+        self.input_height = img_size
+        self.input_width = img_size
+        self.input_dim = 3
+        if dataset == 'wood':
+            self.output_dim = 5
+        elif dataset == 'DAGM_8':
+            self.output_dim = 2
+        elif dataset == 'DAGM_10':
+            self.output_dim = 2
+        elif dataset == 'middle_white':
+            self.output_dim = 2
+        elif dataset == 'solar':
+            self.output_dim = 2
+        elif dataset == 'flower_chip':
+            self.output_dim = 2
+        elif dataset == 'gas_leak_dirt':
+            self.output_dim = 2
+        elif dataset == 'intra_chip_diff':
+            self.output_dim = 2
+        else:
+            raise Exception("[!] No dataset named %s" %dataset)
+        self.conv = nn.Sequential(
+            nn.Conv2d(self.input_dim, 6, 5, 1, 2),
+            nn.ReLU(True),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(6, 16, 5, 1, 2),
+            nn.ReLU(True),
+            nn.MaxPool2d(2, 2),
+        )
+        self.classifier = nn.Sequential(
+            nn.Linear(16*(self.input_height//4)*(self.input_width//4), 120),
+            nn.ReLU(True),
+            nn.Linear(120, self.output_dim),
+            nn.Softmax(),
+        )
+
+        utils.initialize_weights(self.conv)
+        utils.initialize_weights(self.classifier)
+    def forward(self, x):
+        x = self.conv(x)
+        x = x.view(-1, 16*(self.input_height//4)*(self.input_width//4))
+        x = self.classifier(x)
+        return x
+
 class vgg19(nn.Module):
     def __init__(self, dataset='wood', img_size=128):
         super(vgg19, self).__init__()
@@ -19,6 +66,10 @@ class vgg19(nn.Module):
         self.input_dim = 3
         if dataset == 'wood':
             self.output_dim = 5
+        elif dataset == 'DAGM_8':
+            self.output_dim = 2
+        elif dataset == 'DAGM_10':
+            self.output_dim = 2
         elif dataset == 'middle_white':
             self.output_dim = 2
         elif dataset == 'solar':
@@ -55,17 +106,21 @@ class vgg19(nn.Module):
 
 class transfer(object):
     def __init__(self, args):
+        self.date = args.date
         self.dataset = args.dataset
         self.img_size = args.img_size
         self.lr = args.lr
         self.batch_size = args.batch_size
         self.epoch = args.epoch
         self.decay = args.decay
-        self.result_dir = os.path.join(args.result_folder, args.dataset)
+        self.result_dir = os.path.join(args.result_folder, args.dataset, args.network, args.date)
         if not os.path.exists(self.result_dir):
             os.makedirs(self.result_dir)
 
-        self.network = vgg19(self.dataset, self.img_size)
+        if args.network == 'vgg':
+            self.network = vgg19(self.dataset, self.img_size)
+        else:
+            self.network = lenet(self.dataset, self.img_size)
         self.optimizer = optim.SGD(self.network.parameters(), lr=self.lr)
 
         self.network.cuda()
@@ -89,6 +144,16 @@ class transfer(object):
             self.train_data_loader = utilsLoadData.load_all(
                 data_dir='../data/wood', 
                 batch_size=self.batch_size, 
+                img_size=self.img_size)
+        elif self.dataset == 'DAGM_8':
+            self.train_data_loader = utilsLoadData.load_all(
+                data_dir='../data/DAGM_8',
+                batch_size=self.batch_size,
+                img_size=self.img_size)
+        elif self.dataset == 'DAGM_10':
+            self.train_data_loader = utilsLoadData.load_all(
+                data_dir='../data/DAGM_10',
+                batch_size=self.batch_size,
                 img_size=self.img_size)
         elif self.dataset == 'middle_white':
             self.train_data_loader = utilsLoadData.load_two(self.batch_size, self.img_size, '../data/middle_white/OK_train_128', '../data/middle_white/NG_train_128')
@@ -129,8 +194,8 @@ class transfer(object):
                 self.optimizer.zero_grad()
  
                 outputs = self.network(x_)
-                _, preds = torch.max(outputs.data, 1, keepdim=True)
-                _, gts = torch.max(y_.data, 1, keepdim=True)
+                _, preds = torch.max(outputs.data, 1, keepdim=True) # find the max pos
+                _, gts = torch.max(y_.data, 1, keepdim=True) # find the max pos
                 loss = self.BCE_loss(outputs, y_)
 
                 loss.backward()
@@ -165,7 +230,7 @@ class transfer(object):
                 f.write("--------------------------------------\n")
 
             # compute testing accuracy and print testing information
-            if not self.dataset == 'wood':
+            if self.dataset == 'wod':
                 self.predict_test()
 
                 with open(self.record_file, 'a') as f:
